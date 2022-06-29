@@ -155,18 +155,6 @@ int getCursorPosition(int *row, int *cols) {
   buf[i] = '\0';
   printf("\r\n&buf[1]: '%s'\r\n", &buf[1]);
 
-//  printf("\r\n");
-//  char c;
-//  while (read(STDIN_FILENO, &c, 1) == 1) {
-//    if (iscntrl(c)) {
-//      printf("%d\r\n", c);
-//    } else {
-//      printf("%d ('%c')", c, c);
-//    }
-//  }
-
-//  editorReadKey();
-//  return -1;
   if (buf[0] != '\x1b' || buf[1] != '[') {
     return -1;
   }
@@ -185,21 +173,12 @@ int getWindowSize(int *rows, int *cols) {
       return -1;
     }
     return getCursorPosition(rows, cols);
-//    editorReadKey();
-//    return -1;
+
   } else {
     *cols = ws.ws_col;
     *rows = ws.ws_row;
     return 0;
   }
-
-//  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
-//    return -1;
-//  } else {
-//    *cols = ws.ws_col;
-//    *rows = ws.ws_row;
-//    return 0;
-//  }
 }
 
 /*** append buffer ***/
@@ -249,11 +228,9 @@ void editorDrawRows(struct abuf *ab) {
       abAppend(ab, "~", 1);
     }
 
-//  write(STDOUT_FILENO, "~", 1);
     abAppend(ab, "\x1b[K", 3);
     if (y < E.screenrows - 1) {
       abAppend(ab, "\r\n", 2);
-//      write(STDOUT_FILENO, "\r\n", 2);
     }
   }
 }
@@ -262,23 +239,17 @@ void editorRefreshScreen() {
   struct abuf ab = ABUF_INIT;
 
   abAppend(&ab, "\xb[?25l", 6);
-//  abAppend(&ab, "\x1b[2J", 4);
   abAppend(&ab, "\x1b[H", 3);
-
-//  write(STDOUT_FILENO, "\x1b[2J", 4);
-//  write(STDOUT_FILENO, "\x1b[H", 3);
 
   editorDrawRows(&ab);
   char buf[32];
   snprintf(buf, sizeof(buf), "\x1b[%d;%dH", E.cy + 1, E.cx + 1);
   abAppend(&ab, buf, strlen(buf));
 
-//  abAppend(&ab, "\x1b[H", 3);
   abAppend(&ab, "\x1b[?25h", 6);
 
   write(STDOUT_FILENO, ab.b, ab.len);
   abFree(&ab);
-//  write(STDOUT_FILENO, "\x1b[H", 3);
 }
 
 /*** input ***/
@@ -360,4 +331,3 @@ int main() {
 
   return 0;
 }
-
