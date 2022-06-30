@@ -18,7 +18,7 @@
 #include <time.h>
 
 /*** defines ***/
-#define GVIM_VERSION "0.5.6"
+#define GVIM_VERSION "0.5.9"
 #define GVIM_TAB_STOP 8
 #define GVIM_QUIT_TIMES 2
 #define CTRL_KEY(k) ((k)&0X1f)
@@ -65,7 +65,7 @@ struct editorConfig E;
 /*** prototypes ***/
 void editorSetStatusMessage(const char *fmt, ...);
 void editorRefreshScreen();
-char *editorPrompt();
+char *editorPrompt(char *prompt, void (*callback)(char *, int));
 
 /*** terminal ***/
 void die(const char *s) {
@@ -235,6 +235,21 @@ int editorRowCxToRx(erow *row, int cx) {
     rx++;
   }
   return rx;
+}
+
+int editorRowRxToCx(erow *row, int rx) {
+  int cur_rx = 0;
+  int cx;
+  for (cx = 0; cx < row->size; cx++) {
+    if (row->chars[cx] == '\t') {
+      cur_rx += (GVIM_TAB_STOP - 1) - (cur_rx % GVIM_TAB_STOP);
+    }
+    cur_rx++;
+    if (cur_rx > rx) {
+      return cx;
+    }
+  }
+  return cx;
 }
 
 void editorUpdateRow(erow *row) {
@@ -422,7 +437,7 @@ void editorOpen(char *filename) {
 
 void editorSave() {
   if (E.filename == NULL) {
-    E.filename = editorPrompt("Save as: %s (ESC to cancel)");
+    E.filename = editorPrompt("Save as: %s (ESC to cancel)", NULL);
     if (E.filename == NULL) {
       editorSetStatusMessage("Save aborted");
       return;
@@ -449,6 +464,55 @@ void editorSave() {
   free(buf);
   editorSetStatusMessage("Can't save! I/O error: %s", strerror(errno));
 }
+
+/*** find ***/
+void editorFindCallback(char *query, int key) {
+  if (key == '\r' || key == '\x1b') {
+    return;
+  }
+
+  int i;
+  for (i = 0; i < E.numrows; i++) {
+    erow *row = &E.row[i];
+    char *match = strstr(row->render, query);
+    if (match) {
+      E.cy = i;
+      E.cx = editorRowRxToCx(row, match - row->render);
+      E.rowoff = E.numrows;
+      break;
+    }
+  }
+}
+
+void editorFind() {
+  char *query = editorPrompt("Search: %s (ESC to cancel)", editorFindCallback);
+  
+  if (query) {
+    free(query);
+  }
+}
+
+// void editorFind() {
+//   char *query = editorPrompt("Search: %s (ESC to cancel)", NULL);
+//   if (query == NULL) {
+//     return;
+//   }
+
+//   int i;
+//   for (i = 0; i < E.numrows; i++) {
+//     erow *row = &E.row[i];
+//     char *match = strstr(row->render, query);
+//     if (match) {
+//       E.cy = i;
+//       E.cx = editorRowRxToCx(row, match - row->render);
+// //      E.cx = match - row->render;
+//       E.rowoff = E.numrows;
+//       break;
+//     }
+//   }
+
+//   free(query);
+//}
 
 /*** append buffer ***/
 struct abuf {
@@ -600,7 +664,7 @@ void editorSetStatusMessage(const char *fmt, ...) {
 }
 
 /*** input ***/
-char *editorPrompt(char *prompt) {
+char *editorPrompt(char *prompt, void (*callback)(char *, int)) {
   size_t bufsize = 128;
   char *buf = malloc(bufsize);
 
@@ -618,11 +682,17 @@ char *editorPrompt(char *prompt) {
       }
     } else if (c == '\x1b') {
         editorSetStatusMessage("");
+        if (callback) {
+          callback(buf, c);
+        }
         free(buf);
         return NULL;
     } else if (c == '\r') {
         if (buflen != 0) {
           editorSetStatusMessage("");
+          if (callback) {
+            callback(buf, c);
+          }
           return buf;
         }
     } else if (!iscntrl(c) && c < 128) {
@@ -633,8 +703,11 @@ char *editorPrompt(char *prompt) {
         buf[buflen++] = c;
         buf[buflen] = '\0';
       }
+    if (callback) {
+      callback(buf, c);
     }
   }
+}
 
 void editorMoveCursor(int key) {
   erow *row = (E.cy >= E.numrows) ? NULL : &E.row[E.cy];
@@ -713,6 +786,10 @@ void editorProcessKeypress() {
       }
       break;
 
+    case CTRL_KEY('f'):
+      editorFind();
+      break;
+
     case BACKSPACE:
     case CTRL_KEY('h'):
     case DEL_KEY:
@@ -786,7 +863,7 @@ int main(int argc, char *argv[]) {
     editorOpen(argv[1]);
   }
 
-  editorSetStatusMessage("HELP: Ctrl-S = Save | Ctrl-Q = quit");
+  editorSetStatusMessage("HELP: Ctrl-S = Save | Ctrl-F = Find | Ctrl-Q = Quit");
 
   while (1) {
     editorRefreshScreen();
