@@ -18,7 +18,7 @@
 #include <time.h>
 
 /*** defines ***/
-#define GVIM_VERSION "0.4.8"
+#define GVIM_VERSION "0.5.6"
 #define GVIM_TAB_STOP 8
 #define GVIM_QUIT_TIMES 2
 #define CTRL_KEY(k) ((k)&0X1f)
@@ -64,6 +64,8 @@ struct editorConfig E;
 
 /*** prototypes ***/
 void editorSetStatusMessage(const char *fmt, ...);
+void editorRefreshScreen();
+char *editorPrompt();
 
 /*** terminal ***/
 void die(const char *s) {
@@ -420,7 +422,11 @@ void editorOpen(char *filename) {
 
 void editorSave() {
   if (E.filename == NULL) {
-    return;
+    E.filename = editorPrompt("Save as: %s (ESC to cancel)");
+    if (E.filename == NULL) {
+      editorSetStatusMessage("Save aborted");
+      return;
+    }
   }
 
   int len;
@@ -594,6 +600,42 @@ void editorSetStatusMessage(const char *fmt, ...) {
 }
 
 /*** input ***/
+char *editorPrompt(char *prompt) {
+  size_t bufsize = 128;
+  char *buf = malloc(bufsize);
+
+  size_t buflen = 0;
+  buf[0] = '\0';
+
+  while (1) {
+    editorSetStatusMessage(prompt, buf);
+    editorRefreshScreen();
+
+    int c = editorReadKey();
+    if (c == DEL_KEY || c == CTRL_KEY('h') || c == BACKSPACE) {
+      if (buflen != 0) {
+        buf[--buflen] = '\0';
+      }
+    } else if (c == '\x1b') {
+        editorSetStatusMessage("");
+        free(buf);
+        return NULL;
+    } else if (c == '\r') {
+        if (buflen != 0) {
+          editorSetStatusMessage("");
+          return buf;
+        }
+    } else if (!iscntrl(c) && c < 128) {
+        if (buflen == bufsize - 1) {
+          bufsize *= 2;
+          buf = realloc(buf, bufsize);
+        }
+        buf[buflen++] = c;
+        buf[buflen] = '\0';
+      }
+    }
+  }
+
 void editorMoveCursor(int key) {
   erow *row = (E.cy >= E.numrows) ? NULL : &E.row[E.cy];
 
